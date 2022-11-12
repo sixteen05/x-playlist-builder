@@ -1,9 +1,25 @@
-use rspotify::{scopes, AuthCodeSpotify, Config, Credentials, OAuth};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use rspotify::{prelude::*, scopes, AuthCodeSpotify, Credentials, OAuth};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AuthCallbackRequest {
+    code: String,
+}
 
 #[get("/")]
-async fn hello() -> impl Responder {
-    HttpResponse::Ok().body("Welcome to x playlist builder!")
+async fn index() -> impl Responder {
+    let spotify = init_spotify();
+    let auth_url = spotify.get_authorize_url(true).unwrap();
+    return auth_url;
+}
+
+#[get("/callback")]
+async fn callback(info: web::Query<AuthCallbackRequest>) -> impl Responder {
+    let mut spotify = init_spotify();
+    let code = &info.code;
+    spotify.request_token(code).await.unwrap();
+    return HttpResponse::Ok().body("Got the code!");
 }
 
 #[post("/echo")]
@@ -16,10 +32,6 @@ async fn manual_hello() -> impl Responder {
 }
 
 fn init_spotify() -> AuthCodeSpotify {
-    let config = Config {
-        ..Default::default()
-    };
-
     let oauth = OAuth {
         scopes: scopes!(
             "user-read-private",
@@ -27,22 +39,22 @@ fn init_spotify() -> AuthCodeSpotify {
             "user-library-read",
             "user-library-modify"
         ),
-        redirect_uri: "http://localhost:8000/callback".to_owned(),
+        redirect_uri: "http://localhost:8080/callback".to_owned(),
         ..Default::default()
     };
 
-    // Replacing client_id and client_secret with yours.
     let creds = Credentials::from_env();
 
-    AuthCodeSpotify::with_config(creds.unwrap(), oauth, config)
+    AuthCodeSpotify::new(creds.unwrap(), oauth)
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .service(hello)
+            .service(index)
             .service(echo)
+            .service(callback)
             .route("/hey", web::get().to(manual_hello))
     })
     .bind(("127.0.0.1", 8080))?
