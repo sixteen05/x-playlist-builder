@@ -1,4 +1,5 @@
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use futures::stream::TryStreamExt;
 use rspotify::{prelude::*, scopes, AuthCodeSpotify, Credentials, OAuth};
 use serde::Deserialize;
 
@@ -8,18 +9,41 @@ pub struct AuthCallbackRequest {
 }
 
 #[get("/")]
-async fn index() -> impl Responder {
+async fn _index() -> impl Responder {
     let spotify = init_spotify();
     let auth_url = spotify.get_authorize_url(true).unwrap();
     return auth_url;
 }
 
 #[get("/callback")]
-async fn callback(info: web::Query<AuthCallbackRequest>) -> impl Responder {
+async fn _callback(info: web::Query<AuthCallbackRequest>) -> impl Responder {
     let mut spotify = init_spotify();
     let code = &info.code;
     spotify.request_token(code).await.unwrap();
-    return HttpResponse::Ok().body("Got the code!");
+    return HttpResponse::Ok().body("Got the code & access token!");
+}
+
+#[get("/liked/songs")]
+async fn liked_songs() -> impl Responder {
+    let mut spotify = init_spotify();
+    let url = spotify.get_authorize_url(false).unwrap();
+    spotify.prompt_for_token(&url).await.unwrap();
+    let stream = spotify.current_user_saved_tracks(None);
+    println!("\nItems (concurrent):");
+    stream
+        .try_for_each_concurrent(10, |item| async move {
+            let r = item.track.album.release_date.unwrap();
+            let release_year = r.split("-").next().unwrap();
+            let year_val = release_year.parse::<i32>().unwrap();
+            if year_val < 1990 {
+                println!("* {}, Year - {}", item.track.name, release_year);
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    return HttpResponse::Ok().body("Got liked songs!");
 }
 
 #[post("/echo")]
@@ -44,7 +68,6 @@ fn init_spotify() -> AuthCodeSpotify {
     };
 
     let creds = Credentials::from_env();
-
     AuthCodeSpotify::new(creds.unwrap(), oauth)
 }
 
@@ -52,9 +75,10 @@ fn init_spotify() -> AuthCodeSpotify {
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
-            .service(index)
+            // .service(index)
             .service(echo)
-            .service(callback)
+            // .service(callback)
+            .service(liked_songs)
             .route("/hey", web::get().to(manual_hello))
     })
     .bind(("127.0.0.1", 8080))?
