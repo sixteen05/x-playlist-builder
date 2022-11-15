@@ -2229,11 +2229,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "x-playlist-builder"
+name = "x_playlist_builder"
 version = "0.1.0"
 dependencies = [
  "actix-web",
  "futures",
+ "futures-util",
  "rspotify",
  "serde",
 ]
