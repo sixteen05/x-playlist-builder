@@ -1,7 +1,12 @@
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use futures::stream::TryStreamExt;
-use rspotify::{prelude::*, scopes, AuthCodeSpotify, Credentials, OAuth};
+use futures_util::pin_mut;
+use rspotify::{
+    model:: PlayableId,
+    prelude::*,
+};
 use serde::Deserialize;
+use x_playlist_builder::{auth::init_spotify, playlist::create_playlist};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuthCallbackRequest {
@@ -23,27 +28,42 @@ async fn _callback(info: web::Query<AuthCallbackRequest>) -> impl Responder {
     return HttpResponse::Ok().body("Got the code & access token!");
 }
 
-#[get("/liked/songs")]
+#[get("/liked/old-songs/create-playlist")]
 async fn liked_songs() -> impl Responder {
     let mut spotify = init_spotify();
     let url = spotify.get_authorize_url(false).unwrap();
     spotify.prompt_for_token(&url).await.unwrap();
+    let spotify_client = spotify.clone();
+    let playlist = create_playlist(spotify_client).await;
+
     let stream = spotify.current_user_saved_tracks(None);
-    println!("\nItems (concurrent):");
-    stream
-        .try_for_each_concurrent(10, |item| async move {
-            let r = item.track.album.release_date.unwrap();
-            let release_year = r.split("-").next().unwrap();
-            let year_val = release_year.parse::<i32>().unwrap();
-            if year_val < 1990 {
-                println!("* {}, Year - {}", item.track.name, release_year);
-            }
-            Ok(())
-        })
+    let mut tracks = Vec::new();
+
+    pin_mut!(stream);
+    while let Some(item) = stream.try_next().await.unwrap() {
+        let r = item.track.album.release_date.as_ref();
+        let release_year = r.unwrap().split("-").next().unwrap();
+        let year_val = release_year.parse::<i32>().unwrap();
+        if year_val < 1990
+            && item.track.available_markets.len() == 1
+            && item.track.available_markets[0] == "IN"
+        {
+            println!("* {}, Year - {}", item.track.name, release_year);
+            let trackid = item.track.id.unwrap();
+            tracks.push(trackid);
+        }
+    }
+
+    spotify
+        .playlist_add_items(
+            &playlist.id,
+            tracks.iter().map(|track| track as &dyn PlayableId),
+            None,
+        )
         .await
         .unwrap();
 
-    return HttpResponse::Ok().body("Got liked songs!");
+    return HttpResponse::Ok().body("Got liked songs & created the first playlist by x-playlist-builder!");
 }
 
 #[post("/echo")]
@@ -53,22 +73,6 @@ async fn echo(req_body: String) -> impl Responder {
 
 async fn manual_hello() -> impl Responder {
     HttpResponse::Ok().body("Hey there!")
-}
-
-fn init_spotify() -> AuthCodeSpotify {
-    let oauth = OAuth {
-        scopes: scopes!(
-            "user-read-private",
-            "user-read-email",
-            "user-library-read",
-            "user-library-modify"
-        ),
-        redirect_uri: "http://localhost:8080/callback".to_owned(),
-        ..Default::default()
-    };
-
-    let creds = Credentials::from_env();
-    AuthCodeSpotify::new(creds.unwrap(), oauth)
 }
 
 #[actix_web::main]
