@@ -2,11 +2,14 @@ use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use futures::stream::TryStreamExt;
 use futures_util::pin_mut;
 use rspotify::{
-    model:: PlayableId,
+    model::{track, PlayableId, PlaylistItem, TrackId},
     prelude::*,
 };
 use serde::Deserialize;
-use x_playlist_builder::{auth::init_spotify, playlist::create_playlist};
+use x_playlist_builder::{
+    auth::init_spotify,
+    playlist::{create_or_get_playlist, get_all_playlist_created_by_user},
+};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuthCallbackRequest {
@@ -28,16 +31,28 @@ async fn _callback(info: web::Query<AuthCallbackRequest>) -> impl Responder {
     return HttpResponse::Ok().body("Got the code & access token!");
 }
 
-#[get("/liked/old-songs/create-playlist")]
+#[get("/me/playlists")]
+async fn get_all_playlists() -> impl Responder {
+    let mut spotify = init_spotify();
+    let url = spotify.get_authorize_url(false).unwrap();
+    spotify.prompt_for_token(&url).await.unwrap();
+    let spotify_client = spotify.clone();
+    let playlists_created_by_user = get_all_playlist_created_by_user(&spotify_client).await;
+    println!("Playlists for the user");
+    println!("{:#?}", playlists_created_by_user);
+    return HttpResponse::Ok().body("Got all user playlists!");
+}
+
+#[get("/liked/old-songs/create-update-playlist")]
 async fn liked_songs() -> impl Responder {
     let mut spotify = init_spotify();
     let url = spotify.get_authorize_url(false).unwrap();
     spotify.prompt_for_token(&url).await.unwrap();
     let spotify_client = spotify.clone();
-    let playlist = create_playlist(spotify_client).await;
+    let fullplaylist = create_or_get_playlist(spotify_client).await;
 
     let stream = spotify.current_user_saved_tracks(None);
-    let mut tracks = Vec::new();
+    let mut tracks: Vec<TrackId> = Vec::new();
 
     pin_mut!(stream);
     while let Some(item) = stream.try_next().await.unwrap() {
@@ -50,20 +65,32 @@ async fn liked_songs() -> impl Responder {
         {
             println!("* {}, Year - {}", item.track.name, release_year);
             let trackid = item.track.id.unwrap();
-            tracks.push(trackid);
+            let mut song_already_exists = false;
+            for item in &fullplaylist.tracks.items {
+                if item.track.as_ref().unwrap().id().unwrap().id() == trackid.id() {
+                    song_already_exists = true;
+                    break;
+                }
+            }
+            if !song_already_exists {
+                tracks.push(trackid.clone());
+            }
         }
     }
 
-    spotify
-        .playlist_add_items(
-            &playlist.id,
-            tracks.iter().map(|track| track as &dyn PlayableId),
-            None,
-        )
-        .await
-        .unwrap();
+    if tracks.len() != 0 {
+        spotify
+            .playlist_add_items(
+                &fullplaylist.id,
+                tracks.iter().map(|track| track as &dyn PlayableId),
+                None,
+            )
+            .await
+            .unwrap();
+    }
 
-    return HttpResponse::Ok().body("Got liked songs & created the first playlist by x-playlist-builder!");
+    return HttpResponse::Ok()
+        .body("Got liked songs & created the first playlist by x-playlist-builder!");
 }
 
 #[post("/echo")]
@@ -81,7 +108,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             // .service(index)
             .service(echo)
-            // .service(callback)
+            .service(get_all_playlists)
             .service(liked_songs)
             .route("/hey", web::get().to(manual_hello))
     })
