@@ -8,23 +8,24 @@ use crate::util::fetch_all;
 
 pub async fn create_or_get_playlist(spotify: &AuthCodeSpotify) -> FullPlaylist {
     let playlists_created_by_user = get_all_playlist_created_by_user(&spotify).await;
-    let mut playlist_id: Option<PlaylistId> = None;
+    let mut playlist_id: Option<&PlaylistId> = None;
     for playlist in playlists_created_by_user.iter() {
         if playlist.name == "Old hindi" {
-            playlist_id = Some(playlist.id.clone());
+            playlist_id = Some(&playlist.id);
             break;
         }
     }
 
+    let playlist_create;
     let created_updated_playlist_id = match playlist_id {
         Some(playlist_id) => playlist_id,
         None => {
-            let playlist = create_playlist(&spotify).await;
-            playlist.id
+            playlist_create = create_playlist(&spotify).await;
+            &playlist_create.id
         }
     };
 
-    return get_playlist_by_playlist_id(&spotify, &created_updated_playlist_id).await;
+    return get_playlist_by_playlist_id(&spotify, created_updated_playlist_id).await;
 }
 
 pub async fn get_all_playlist_created_by_user(

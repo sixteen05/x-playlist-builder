@@ -45,7 +45,7 @@ async fn liked_songs() -> impl Responder {
                 }
             }
             if !song_already_exists {
-                tracks.push(trackid.clone());
+                tracks.push(trackid);
             }
         }
     }
