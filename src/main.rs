@@ -6,6 +6,7 @@ use rspotify::{
 use x_playlist_builder::{
     auth::SpotifyAuth,
     playlist::{create_or_get_playlist, get_all_playlist_created_by_user}, util::fetch_all,
+    filter:: filter_by_condition,
 };
 
 #[get("/me/playlists")]
@@ -31,9 +32,7 @@ async fn liked_songs() -> impl Responder {
         let r = item.track.album.release_date.as_ref();
         let release_year = r.unwrap().split("-").next().unwrap();
         let year_val = release_year.parse::<i32>().unwrap();
-        if year_val < 1990
-            && item.track.available_markets.len() == 1
-            && item.track.available_markets[0] == "IN"
+        if filter_by_condition("old-hindi".to_string(), year_val, item.track.available_markets)
         {
             println!("* {}, Year - {}", item.track.name, release_year);
             let trackid = item.track.id.unwrap();
