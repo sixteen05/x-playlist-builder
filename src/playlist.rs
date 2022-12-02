@@ -6,11 +6,11 @@ use rspotify::{
 
 use crate::util::fetch_all;
 
-pub async fn create_or_get_playlist(spotify: &AuthCodeSpotify) -> FullPlaylist {
+pub async fn create_or_get_playlist(spotify: &AuthCodeSpotify, playlist_name: String) -> FullPlaylist {
     let playlists_created_by_user = get_all_playlist_created_by_user(&spotify).await;
     let mut playlist_id: Option<&PlaylistId> = None;
     for playlist in playlists_created_by_user.iter() {
-        if playlist.name == "Old hindi" {
+        if playlist.name == playlist_name {
             playlist_id = Some(&playlist.id);
             break;
         }
@@ -20,7 +20,7 @@ pub async fn create_or_get_playlist(spotify: &AuthCodeSpotify) -> FullPlaylist {
     let created_updated_playlist_id = match playlist_id {
         Some(playlist_id) => playlist_id,
         None => {
-            playlist_create = create_playlist(&spotify).await;
+            playlist_create = create_playlist(&spotify, playlist_name).await;
             &playlist_create.id
         }
     };
@@ -50,12 +50,12 @@ pub async fn get_playlist_by_playlist_id(
         .unwrap();
 }
 
-pub async fn create_playlist(spotify: &AuthCodeSpotify) -> FullPlaylist {
+pub async fn create_playlist(spotify: &AuthCodeSpotify, playlist_name: String) -> FullPlaylist {
     let user = spotify.me().await.unwrap();
     return spotify
         .user_playlist_create(
             &user.id,
-            "Old hindi",
+            &playlist_name,
             Some(true), // Seems reverse
             None,
             Some("Playlist created by x-playlist-builder"),
