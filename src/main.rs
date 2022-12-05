@@ -18,7 +18,7 @@ async fn get_all_playlists() -> impl Responder {
     let playlists_created_by_user = get_all_playlist_created_by_user(&spotify).await;
     println!("Playlists for the user");
     println!("{:#?}", playlists_created_by_user);
-    return HttpResponse::Ok().body("Got all user playlists!");
+    HttpResponse::Ok().body("Got all user playlists!")
 }
 
 #[derive(Deserialize)]
@@ -38,13 +38,8 @@ async fn liked_songs(info: web::Path<Condition>) -> impl Responder {
 
     let current_user_saved_tracks = fetch_all(spotify.current_user_saved_tracks(None)).await;
     let mut tracks: Vec<TrackId> = Vec::new();
-
     for item in current_user_saved_tracks {
-        let filter_res = filter_by_condition(
-            condition_name,
-            condition_value,
-            item.track
-        );
+        let filter_res = filter_by_condition(condition_name, condition_value, item.track);
         if filter_res.state {
             let trackid = filter_res.track_id;
             let mut song_already_exists = false;
@@ -60,7 +55,7 @@ async fn liked_songs(info: web::Path<Condition>) -> impl Responder {
         }
     }
 
-    if tracks.len() != 0 {
+    if !tracks.is_empty() {
         spotify
             .playlist_add_items(
                 &existing_playlist.id,
@@ -71,8 +66,7 @@ async fn liked_songs(info: web::Path<Condition>) -> impl Responder {
             .unwrap();
     }
 
-    return HttpResponse::Ok()
-        .body("Got liked songs & created/updated playlist with songs!");
+    HttpResponse::Ok().body("Got liked songs & created/updated playlist with songs!")
 }
 
 #[actix_web::main]

@@ -6,29 +6,24 @@ pub struct FilterResult {
 }
 
 pub fn filter_by_condition(
-    condition_name: &String,
-    condition_value: &String,
+    condition_name: &str,
+    condition_value: &str,
     track: FullTrack,
 ) -> FilterResult {
-    let condition_state = match condition_name.as_str() {
+    let condition_state = match condition_name {
         "old-hindi" => {
             let release_year = track
                 .album
                 .release_date
                 .as_ref()
                 .unwrap()
-                .split("-")
+                .split('-')
                 .next()
                 .unwrap();
             let release_year_value = release_year.parse::<i32>().unwrap();
-            if release_year_value < 1990
+            release_year_value < 1990
                 && track.available_markets.len() == 1
                 && track.available_markets[0] == "IN"
-            {
-                true
-            } else {
-                false
-            }
         }
         "artist" => {
             let track_artists = track.artists;
@@ -49,11 +44,8 @@ pub fn filter_by_condition(
     }
 }
 
-pub fn filter_condition_to_playlist_name(
-    condition_name: &String,
-    condition_value: &String,
-) -> String {
-    match condition_name.as_str() {
+pub fn filter_condition_to_playlist_name(condition_name: &str, condition_value: &str) -> String {
+    match condition_name {
         "old-hindi" => "Old hindi".to_string(),
         "artist" => {
             let prefix = "Best of";
