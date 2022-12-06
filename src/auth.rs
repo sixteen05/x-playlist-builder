@@ -1,4 +1,4 @@
-use rspotify::{scopes, AuthCodeSpotify, Credentials, OAuth, prelude::*,};
+use rspotify::{prelude::*, scopes, AuthCodeSpotify, Credentials, OAuth};
 
 pub struct SpotifyAuth {
     pub client: AuthCodeSpotify,
@@ -23,8 +23,6 @@ impl SpotifyAuth {
         let mut client = AuthCodeSpotify::new(creds.unwrap(), oauth);
         let url = client.get_authorize_url(false).unwrap();
         client.prompt_for_token(&url).await.unwrap();
-        Self {
-            client,
-        }
+        Self { client }
     }
 }

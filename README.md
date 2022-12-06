@@ -31,3 +31,6 @@ RSPOTIFY_CLIENT_SECRET=your_client_secret_value
 - Visit `http://localhost:8080/liked/create-update-playlist/condition/artist/arijit` it will then ask you can to authorize this app in spotify. Then follow the instruction in the terminal.
 - After the above call is executed you would have a public playlist in spotify with songs by artist `Arijit` if they existed in your liked songs list.
 - Replace `arijit` with any other artist name that should create a new playlist for that artist.
+
+## Known Issues
+- Currently, the playlist created is public even when private option is specified. Seems like a issue with the Spotify API. [Link](https://community.spotify.com/t5/Spotify-for-Developers/Api-to-create-a-private-playlist-doesn-t-work/td-p/5407807).

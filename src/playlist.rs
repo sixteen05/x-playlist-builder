@@ -59,7 +59,7 @@ pub async fn create_playlist(spotify: &AuthCodeSpotify, playlist_name: String) -
         .user_playlist_create(
             &user.id,
             &playlist_name,
-            Some(true), // Seems reverse
+            Some(false), // Private doesn't work, creates a public one - https://community.spotify.com/t5/Spotify-for-Developers/Api-to-create-a-private-playlist-doesn-t-work/td-p/5407807
             None,
             Some("Playlist created by x-playlist-builder"),
         )
