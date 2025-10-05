@@ -79,11 +79,8 @@ async fn remove_deleted_tracks_from_liked_playlist() -> impl Responder {
         let filter_res = filter_removed_songs_with_no_avaliable_market(&item.track);
         if filter_res {
             tracks.push(item.track.id.unwrap());
-            println!("{:#?}", item.track.name);
         }
     }
-    println!("{:#?}", tracks);
-    println!("{:#?}", tracks.len());
     if !tracks.is_empty() {
         for chunk in tracks.chunks(50) {
             spotify
@@ -92,8 +89,7 @@ async fn remove_deleted_tracks_from_liked_playlist() -> impl Responder {
                 .unwrap();
         }
     }
-    HttpResponse::Ok()
-        .body("Removed songs from liked songs that no longer exist in any avaliable market!")
+    HttpResponse::Ok().body("Removed songs from liked songs that no longer exist in your region!")
 }
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {

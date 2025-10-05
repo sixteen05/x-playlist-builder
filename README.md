@@ -7,6 +7,8 @@ A tool to create playlist from your liked songs in Spotify. Currently couple con
 - 'old-hindi' hindi songs released before 1990
 - 'artist' songs by artist name.
 
+- Remove songs from liked songs list that are no longer available in your region. The API takes your country from the 
+access token which is bascially the country your account is registered in.
 More things to come ...
 
 ## Setup
