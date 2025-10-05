@@ -20,7 +20,7 @@ impl SpotifyAuth {
         };
 
         let creds = Credentials::from_env();
-        let mut client = AuthCodeSpotify::new(creds.unwrap(), oauth);
+        let client = AuthCodeSpotify::new(creds.unwrap(), oauth);
         let url = client.get_authorize_url(false).unwrap();
         client.prompt_for_token(&url).await.unwrap();
         Self { client }

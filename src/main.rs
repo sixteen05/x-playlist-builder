@@ -1,12 +1,12 @@
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
-use rspotify::{
-    model::{PlayableId, TrackId},
-    prelude::*,
-};
+use rspotify::{model::TrackId, prelude::*};
 use serde::Deserialize;
 use x_playlist_builder::{
     auth::SpotifyAuth,
-    filter::{filter_by_condition, filter_condition_to_playlist_name},
+    filter::{
+        filter_by_condition, filter_condition_to_playlist_name,
+        filter_removed_songs_with_no_avaliable_market,
+    },
     playlist::{create_or_get_playlist, get_all_playlist_created_by_user},
     util::fetch_all,
 };
@@ -56,12 +56,12 @@ async fn liked_songs(info: web::Path<Condition>) -> impl Responder {
     }
 
     if !tracks.is_empty() {
+        let playable_ids: Vec<rspotify::model::PlayableId> = tracks
+            .iter()
+            .map(|track_id| rspotify::model::PlayableId::Track(track_id.clone()))
+            .collect();
         spotify
-            .playlist_add_items(
-                &existing_playlist.id,
-                tracks.iter().map(|track| track as &dyn PlayableId),
-                None,
-            )
+            .playlist_add_items(existing_playlist.id, playable_ids, None)
             .await
             .unwrap();
     }
@@ -69,10 +69,41 @@ async fn liked_songs(info: web::Path<Condition>) -> impl Responder {
     HttpResponse::Ok().body("Got liked songs & created/updated playlist with songs!")
 }
 
+#[get("/liked/remove-deleted-tracks")]
+async fn remove_deleted_tracks_from_liked_playlist() -> impl Responder {
+    let resp = SpotifyAuth::new().await;
+    let spotify = resp.client;
+    let current_user_saved_tracks = fetch_all(spotify.current_user_saved_tracks(None)).await;
+    let mut tracks: Vec<TrackId> = Vec::new();
+    for item in current_user_saved_tracks {
+        let filter_res = filter_removed_songs_with_no_avaliable_market(&item.track);
+        if filter_res {
+            tracks.push(item.track.id.unwrap());
+            println!("{:#?}", item.track.name);
+        }
+    }
+    println!("{:#?}", tracks);
+    println!("{:#?}", tracks.len());
+    if !tracks.is_empty() {
+        for chunk in tracks.chunks(50) {
+            spotify
+                .current_user_saved_tracks_delete(chunk.iter().cloned())
+                .await
+                .unwrap();
+        }
+    }
+    HttpResponse::Ok()
+        .body("Removed songs from liked songs that no longer exist in any avaliable market!")
+}
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| App::new().service(get_all_playlists).service(liked_songs))
-        .bind(("127.0.0.1", 8080))?
-        .run()
-        .await
+    HttpServer::new(|| {
+        App::new()
+            .service(get_all_playlists)
+            .service(liked_songs)
+            .service(remove_deleted_tracks_from_liked_playlist)
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
 }

@@ -44,11 +44,11 @@ pub async fn get_all_playlist_created_by_user(
 
 pub async fn get_playlist_by_playlist_id(
     spotify: &AuthCodeSpotify,
-    playlist_id: &PlaylistId,
+    playlist_id: &PlaylistId<'_>,
 ) -> FullPlaylist {
     let user = spotify.me().await.unwrap();
     return spotify
-        .user_playlist(&user.id, Some(playlist_id), None)
+        .user_playlist(user.id, Some(playlist_id.clone()), None)
         .await
         .unwrap();
 }
@@ -57,7 +57,7 @@ pub async fn create_playlist(spotify: &AuthCodeSpotify, playlist_name: String) -
     let user = spotify.me().await.unwrap();
     return spotify
         .user_playlist_create(
-            &user.id,
+            user.id,
             &playlist_name,
             Some(false), // Private doesn't work, creates a public one - https://community.spotify.com/t5/Spotify-for-Developers/Api-to-create-a-private-playlist-doesn-t-work/td-p/5407807
             None,

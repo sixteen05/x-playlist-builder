@@ -1,15 +1,15 @@
 use rspotify::model::{FullTrack, TrackId};
 
-pub struct FilterResult {
+pub struct FilterResult<'a> {
     pub state: bool,
-    pub track_id: TrackId,
+    pub track_id: TrackId<'a>,
 }
 
-pub fn filter_by_condition(
-    condition_name: &str,
-    condition_value: &str,
+pub fn filter_by_condition<'a>(
+    condition_name: &'a str,
+    condition_value: &'a str,
     track: FullTrack,
-) -> FilterResult {
+) -> FilterResult<'a> {
     let condition_state = match condition_name {
         "old-hindi" => {
             let release_year = track
@@ -53,4 +53,8 @@ pub fn filter_condition_to_playlist_name(condition_name: &str, condition_value: 
         }
         _ => "".to_string(),
     }
+}
+
+pub fn filter_removed_songs_with_no_avaliable_market(track: &FullTrack) -> bool {
+    track.is_playable.unwrap() == false
 }
