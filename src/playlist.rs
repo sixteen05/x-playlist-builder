@@ -27,7 +27,6 @@ pub async fn create_or_get_playlist(
             &playlist_create.id
         }
     };
-
     return get_playlist_by_playlist_id(spotify, created_updated_playlist_id).await;
 }
 
@@ -47,10 +46,29 @@ pub async fn get_playlist_by_playlist_id(
     playlist_id: &PlaylistId<'_>,
 ) -> FullPlaylist {
     let user = spotify.me().await.unwrap();
-    return spotify
+    let public_user = spotify.user(user.clone().id).await.unwrap();
+    let owned_playlist_id =
+        PlaylistId::from_id(playlist_id.id().to_string()).expect("Invalid playlist ID");
+    let playlist_result = spotify
         .user_playlist(user.id, Some(playlist_id.clone()), None)
-        .await
-        .unwrap();
+        .await;
+    match playlist_result {
+        Ok(playlist) => playlist,
+        Err(_e) => FullPlaylist {
+            collaborative: false,
+            description: None,
+            external_urls: Default::default(),
+            id: owned_playlist_id,
+            tracks: Default::default(),
+            followers: Default::default(),
+            href: String::new(),
+            images: vec![],
+            name: "Unknown Playlist".to_string(),
+            public: None,
+            snapshot_id: String::new(),
+            owner: public_user,
+        },
+    }
 }
 
 pub async fn create_playlist(spotify: &AuthCodeSpotify, playlist_name: String) -> FullPlaylist {
@@ -60,7 +78,7 @@ pub async fn create_playlist(spotify: &AuthCodeSpotify, playlist_name: String) -
             user.id,
             &playlist_name,
             Some(false), // Private doesn't work, creates a public one - https://community.spotify.com/t5/Spotify-for-Developers/Api-to-create-a-private-playlist-doesn-t-work/td-p/5407807
-            None,
+            Some(false),
             Some("Playlist created by x-playlist-builder"),
         )
         .await
