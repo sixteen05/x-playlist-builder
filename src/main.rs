@@ -43,23 +43,19 @@ enum MenuAction {
     Exit,
 }
 
-async fn list_playlists() {
-    let resp = SpotifyAuth::new().await;
-    let spotify = resp.client;
-    let playlists_created_by_user = get_all_playlist_created_by_user(&spotify).await;
+async fn list_playlists(spotify: &rspotify::AuthCodeSpotify) {
+    let playlists_created_by_user = get_all_playlist_created_by_user(spotify).await;
     println!("Playlists for the user:");
     for playlist in playlists_created_by_user {
         println!("  - {} ({})", playlist.name, playlist.id);
     }
 }
 
-async fn create_playlist(condition_name: String, condition_value: String) {
-    let resp = SpotifyAuth::new().await;
-    let spotify = resp.client;
+async fn create_playlist(spotify: &rspotify::AuthCodeSpotify, condition_name: String, condition_value: String) {
     let playlist_name = filter_condition_to_playlist_name(&condition_name, &condition_value);
 
     println!("Creating/updating playlist: {}", playlist_name);
-    let existing_playlist = create_or_get_playlist(&spotify, playlist_name).await;
+    let existing_playlist = create_or_get_playlist(spotify, playlist_name).await;
 
     let current_user_saved_tracks = fetch_all(spotify.current_user_saved_tracks(None)).await;
     let mut tracks: Vec<TrackId> = Vec::new();
@@ -98,9 +94,7 @@ async fn create_playlist(condition_name: String, condition_value: String) {
     }
 }
 
-async fn remove_deleted_tracks() {
-    let resp = SpotifyAuth::new().await;
-    let spotify = resp.client;
+async fn remove_deleted_tracks(spotify: &rspotify::AuthCodeSpotify) {
     let current_user_saved_tracks = fetch_all(spotify.current_user_saved_tracks(None)).await;
     let mut tracks: Vec<TrackId> = Vec::new();
 
@@ -175,6 +169,11 @@ fn get_create_playlist_inputs() -> (String, String) {
 }
 
 async fn run_interactive_mode() {
+    // Authenticate once at the start
+    println!("Authenticating with Spotify...\n");
+    let resp = SpotifyAuth::new().await;
+    let spotify = resp.client;
+
     loop {
         println!("\n========================================");
         println!("  Spotify Playlist Builder");
@@ -186,14 +185,14 @@ async fn run_interactive_mode() {
 
         match action {
             MenuAction::ListPlaylists => {
-                list_playlists().await;
+                list_playlists(&spotify).await;
             }
             MenuAction::CreatePlaylist => {
                 let (condition, value) = get_create_playlist_inputs();
-                create_playlist(condition, value).await;
+                create_playlist(&spotify, condition, value).await;
             }
             MenuAction::RemoveDeletedTracks => {
-                remove_deleted_tracks().await;
+                remove_deleted_tracks(&spotify).await;
             }
             MenuAction::Exit => {
                 println!("Goodbye!");
@@ -212,11 +211,18 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Commands::ListPlaylists) => list_playlists().await,
-        Some(Commands::CreatePlaylist { condition, value }) => {
-            create_playlist(condition, value).await
+        Some(Commands::ListPlaylists) => {
+            let resp = SpotifyAuth::new().await;
+            list_playlists(&resp.client).await;
         }
-        Some(Commands::RemoveDeletedTracks) => remove_deleted_tracks().await,
+        Some(Commands::CreatePlaylist { condition, value }) => {
+            let resp = SpotifyAuth::new().await;
+            create_playlist(&resp.client, condition, value).await;
+        }
+        Some(Commands::RemoveDeletedTracks) => {
+            let resp = SpotifyAuth::new().await;
+            remove_deleted_tracks(&resp.client).await;
+        }
         None => run_interactive_mode().await,
     }
 }
