@@ -1,6 +1,5 @@
-use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
+use clap::{Parser, Subcommand};
 use rspotify::{model::TrackId, prelude::*};
-use serde::Deserialize;
 use x_playlist_builder::{
     auth::SpotifyAuth,
     filter::{
@@ -11,35 +10,55 @@ use x_playlist_builder::{
     util::fetch_all,
 };
 
-#[get("/me/playlists")]
-async fn get_all_playlists() -> impl Responder {
+#[derive(Parser)]
+#[command(name = "x-playlist-builder")]
+#[command(about = "A tool to create playlists from your liked songs in Spotify", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// List all playlists created by the user
+    ListPlaylists,
+    /// Create or update a playlist from liked songs based on a condition
+    CreatePlaylist {
+        /// Condition name (e.g., "old-hindi", "artist")
+        #[arg(short, long)]
+        condition: String,
+        /// Condition value (e.g., artist name for "artist" condition)
+        #[arg(short, long)]
+        value: String,
+    },
+    /// Remove unavailable tracks from liked songs
+    RemoveDeletedTracks,
+}
+
+async fn list_playlists() {
     let resp = SpotifyAuth::new().await;
     let spotify = resp.client;
     let playlists_created_by_user = get_all_playlist_created_by_user(&spotify).await;
-    println!("Playlists for the user");
-    println!("{:#?}", playlists_created_by_user);
-    HttpResponse::Ok().body("Got all user playlists!")
+    println!("Playlists for the user:");
+    for playlist in playlists_created_by_user {
+        println!("  - {} ({})", playlist.name, playlist.id);
+    }
 }
 
-#[derive(Deserialize)]
-struct Condition {
-    name: String,
-    value: String,
-}
-
-#[get("/liked/create-update-playlist/condition/{name}/{value}")]
-async fn liked_songs(info: web::Path<Condition>) -> impl Responder {
-    let condition_name = &info.name;
-    let condition_value = &info.value;
+async fn create_playlist(condition_name: String, condition_value: String) {
     let resp = SpotifyAuth::new().await;
     let spotify = resp.client;
-    let playlist_name = filter_condition_to_playlist_name(condition_name, condition_value);
+    let playlist_name = filter_condition_to_playlist_name(&condition_name, &condition_value);
+
+    println!("Creating/updating playlist: {}", playlist_name);
     let existing_playlist = create_or_get_playlist(&spotify, playlist_name).await;
 
     let current_user_saved_tracks = fetch_all(spotify.current_user_saved_tracks(None)).await;
     let mut tracks: Vec<TrackId> = Vec::new();
+
+    println!("Filtering liked songs...");
     for item in current_user_saved_tracks {
-        let filter_res = filter_by_condition(condition_name, condition_value, item.track);
+        let filter_res = filter_by_condition(&condition_name, &condition_value, item.track);
         if filter_res.state {
             let trackid = filter_res.track_id;
             let mut song_already_exists = false;
@@ -56,6 +75,7 @@ async fn liked_songs(info: web::Path<Condition>) -> impl Responder {
     }
 
     if !tracks.is_empty() {
+        println!("Adding {} new tracks to playlist...", tracks.len());
         let playable_ids: Vec<rspotify::model::PlayableId> = tracks
             .iter()
             .map(|track_id| rspotify::model::PlayableId::Track(track_id.clone()))
@@ -64,42 +84,47 @@ async fn liked_songs(info: web::Path<Condition>) -> impl Responder {
             .playlist_add_items(existing_playlist.id, playable_ids, None)
             .await
             .unwrap();
+        println!("Playlist updated successfully!");
+    } else {
+        println!("No new tracks to add.");
     }
-
-    HttpResponse::Ok().body("Got liked songs & created/updated playlist with songs!")
 }
 
-#[get("/liked/remove-deleted-tracks")]
-async fn remove_deleted_tracks_from_liked_playlist() -> impl Responder {
+async fn remove_deleted_tracks() {
     let resp = SpotifyAuth::new().await;
     let spotify = resp.client;
     let current_user_saved_tracks = fetch_all(spotify.current_user_saved_tracks(None)).await;
     let mut tracks: Vec<TrackId> = Vec::new();
+
+    println!("Scanning for unavailable tracks...");
     for item in current_user_saved_tracks {
         let filter_res = filter_removed_songs_with_no_avaliable_market(&item.track);
         if filter_res {
             tracks.push(item.track.id.unwrap());
         }
     }
+
     if !tracks.is_empty() {
+        println!("Removing {} unavailable tracks...", tracks.len());
         for chunk in tracks.chunks(50) {
             spotify
                 .current_user_saved_tracks_delete(chunk.iter().cloned())
                 .await
                 .unwrap();
         }
+        println!("Removed {} tracks from liked songs!", tracks.len());
+    } else {
+        println!("No unavailable tracks found.");
     }
-    HttpResponse::Ok().body("Removed songs from liked songs that no longer exist in your region!")
 }
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
-        App::new()
-            .service(get_all_playlists)
-            .service(liked_songs)
-            .service(remove_deleted_tracks_from_liked_playlist)
-    })
-    .bind(("127.0.0.1", 8080))?
-    .run()
-    .await
+
+#[tokio::main]
+async fn main() {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::ListPlaylists => list_playlists().await,
+        Commands::CreatePlaylist { condition, value } => create_playlist(condition, value).await,
+        Commands::RemoveDeletedTracks => remove_deleted_tracks().await,
+    }
 }
