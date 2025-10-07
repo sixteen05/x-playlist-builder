@@ -29,9 +29,25 @@ RSPOTIFY_CLIENT_SECRET=your_client_secret_value
 ## Running
 
 - Ensure that you have `Rust` installed.
-- Run `cargo run -- --help` to see all available commands.
 
-### Commands
+### Interactive Mode (Recommended)
+
+Simply run:
+```bash
+cargo run
+```
+
+This will launch an interactive menu where you can:
+- List all your playlists
+- Create/update playlists from liked songs (with guided prompts)
+- Remove unavailable tracks from liked songs
+- Navigate back to the main menu after each action
+
+On first run, the app will prompt you to authorize it in Spotify. Follow the instructions in the terminal.
+
+### Direct CLI Commands
+
+You can also use direct commands without the interactive menu:
 
 **List all your playlists:**
 ```bash
@@ -47,11 +63,14 @@ cargo run -- create-playlist --condition artist --value arijit
 cargo run -- create-playlist --condition old-hindi --value ""
 ```
 
-On first run, the app will prompt you to authorize it in Spotify. Follow the instructions in the terminal.
-
 **Remove unavailable tracks from liked songs:**
 ```bash
 cargo run -- remove-deleted-tracks
+```
+
+**View help:**
+```bash
+cargo run -- --help
 ```
 
 ## Known Issues

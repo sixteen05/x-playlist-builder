@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use dialoguer::{theme::ColorfulTheme, Input, Select};
 use rspotify::{model::TrackId, prelude::*};
 use x_playlist_builder::{
     auth::SpotifyAuth,
@@ -15,7 +16,7 @@ use x_playlist_builder::{
 #[command(about = "A tool to create playlists from your liked songs in Spotify", long_about = None)]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -33,6 +34,13 @@ enum Commands {
     },
     /// Remove unavailable tracks from liked songs
     RemoveDeletedTracks,
+}
+
+enum MenuAction {
+    ListPlaylists,
+    CreatePlaylist,
+    RemoveDeletedTracks,
+    Exit,
 }
 
 async fn list_playlists() {
@@ -118,13 +126,97 @@ async fn remove_deleted_tracks() {
     }
 }
 
+fn show_main_menu() -> MenuAction {
+    let options = vec![
+        "List all playlists",
+        "Create/update playlist from liked songs",
+        "Remove unavailable tracks from liked songs",
+        "Exit",
+    ];
+
+    let selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("What would you like to do?")
+        .items(&options)
+        .default(0)
+        .interact()
+        .unwrap();
+
+    match selection {
+        0 => MenuAction::ListPlaylists,
+        1 => MenuAction::CreatePlaylist,
+        2 => MenuAction::RemoveDeletedTracks,
+        3 => MenuAction::Exit,
+        _ => MenuAction::Exit,
+    }
+}
+
+fn get_create_playlist_inputs() -> (String, String) {
+    let conditions = vec!["artist", "old-hindi"];
+
+    let condition_selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("Select a condition")
+        .items(&conditions)
+        .default(0)
+        .interact()
+        .unwrap();
+
+    let condition = conditions[condition_selection].to_string();
+
+    let value = if condition == "artist" {
+        Input::<String>::with_theme(&ColorfulTheme::default())
+            .with_prompt("Enter artist name")
+            .interact_text()
+            .unwrap()
+    } else {
+        String::new()
+    };
+
+    (condition, value)
+}
+
+async fn run_interactive_mode() {
+    loop {
+        println!("\n========================================");
+        println!("  Spotify Playlist Builder");
+        println!("========================================\n");
+
+        let action = show_main_menu();
+
+        println!();
+
+        match action {
+            MenuAction::ListPlaylists => {
+                list_playlists().await;
+            }
+            MenuAction::CreatePlaylist => {
+                let (condition, value) = get_create_playlist_inputs();
+                create_playlist(condition, value).await;
+            }
+            MenuAction::RemoveDeletedTracks => {
+                remove_deleted_tracks().await;
+            }
+            MenuAction::Exit => {
+                println!("Goodbye!");
+                break;
+            }
+        }
+
+        println!("\nPress Enter to continue...");
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).unwrap();
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::ListPlaylists => list_playlists().await,
-        Commands::CreatePlaylist { condition, value } => create_playlist(condition, value).await,
-        Commands::RemoveDeletedTracks => remove_deleted_tracks().await,
+        Some(Commands::ListPlaylists) => list_playlists().await,
+        Some(Commands::CreatePlaylist { condition, value }) => {
+            create_playlist(condition, value).await
+        }
+        Some(Commands::RemoveDeletedTracks) => remove_deleted_tracks().await,
+        None => run_interactive_mode().await,
     }
 }

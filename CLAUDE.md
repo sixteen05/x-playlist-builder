@@ -4,17 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Rust-based CLI tool for Spotify playlist management that creates playlists from liked songs based on conditions, and removes unavailable tracks from liked songs. Uses clap for CLI parsing and rspotify for Spotify API integration.
+A Rust-based CLI tool for Spotify playlist management that creates playlists from liked songs based on conditions, and removes unavailable tracks from liked songs. Uses clap for CLI parsing, dialoguer for interactive menus, and rspotify for Spotify API integration.
 
 ## Build & Run Commands
 
 - **Build**: `cargo build`
+- **Run interactive mode**: `cargo run` (launches menu-based interface)
 - **Run with help**: `cargo run -- --help`
 - **Test**: `cargo test`
 - **Check**: `cargo check`
 
-## CLI Commands
+## CLI Modes
 
+### Interactive Mode (Default)
+When run without arguments, launches an interactive menu with:
+- List all playlists
+- Create/update playlist (with guided prompts for condition selection)
+- Remove unavailable tracks
+- Exit option with return to main menu after each action
+
+### Direct CLI Commands
 - **List playlists**: `cargo run -- list-playlists`
 - **Create/update playlist**: `cargo run -- create-playlist --condition <CONDITION> --value <VALUE>`
   - Example: `cargo run -- create-playlist --condition artist --value arijit`
@@ -52,10 +61,14 @@ Redirect URI is hardcoded to `http://localhost:8080/callback` and must be config
 - `fetch_all()`: Wrapper around rspotify Paginator that collects all pages into Vec
 
 **Main Flow (main.rs)**
-- CLI uses clap for argument parsing with subcommands
-- Three main commands: ListPlaylists, CreatePlaylist, RemoveDeletedTracks
+- CLI uses clap for argument parsing with optional subcommands
+- Interactive mode (`run_interactive_mode`): Menu-driven loop using dialoguer for user interaction
+  - `show_main_menu()`: Displays menu options and returns selected action
+  - `get_create_playlist_inputs()`: Prompts for condition and value selection
+  - Returns to menu after each operation with "Press Enter to continue" prompt
+- Direct command mode: Three commands (ListPlaylists, CreatePlaylist, RemoveDeletedTracks)
 - CreatePlaylist flow:
-  1. Parse CLI arguments for condition and value
+  1. Parse CLI arguments or interactive inputs for condition and value
   2. Auth creates/refreshes Spotify client
   3. Fetches all liked songs using pagination
   4. Filters tracks by condition
