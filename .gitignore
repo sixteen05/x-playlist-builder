@@ -1,3 +1,4 @@
 /target
 .env
 scribble
+.spotify_token_cache.json
