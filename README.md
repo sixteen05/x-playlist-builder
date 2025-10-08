@@ -1,77 +1,99 @@
 # x-playlist-builder
 
-## Current State
-WIP :construction:
+A Rust-based CLI tool for Spotify playlist management that creates smart playlists from your liked songs and removes unavailable tracks.
 
-A tool to create playlist from your liked songs in Spotify. Currently couple condition supported -
-- 'old-hindi' hindi songs released before 1990
-- 'artist' songs by artist name.
+## Features
 
-- Remove songs from liked songs list that are no longer available in your region. The API takes your country from the 
-access token which is bascially the country your account is registered in.
-More things to come ...
+- **Smart Playlist Creation**: Automatically create playlists from your liked songs based on conditions:
+  - **Artist**: Filter songs by artist name (case-insensitive partial matching)
+  - **Old Hindi**: Hindi songs released before 1990, available only in India market
+- **Cleanup Tool**: Remove unavailable tracks from your liked songs 
+- **Interactive Mode**: User-friendly menu-based interface for all operations
+- **Token Caching**: Seamless authentication with automatic token refresh
+
+## Prerequisites
+
+- Rust (install from [rustup.rs](https://rustup.rs))
+- Spotify account
+- Spotify Developer credentials
 
 ## Setup
 
-Please note, things might not work as expected at times currently ...
+### 1. Get Spotify API Credentials
 
-You would need to create dev app on spotify to get credentials `client_id` & `client_secret`.
+Create a Spotify Developer app to obtain your `client_id` and `client_secret`:
 
-App can be created trhough the spotify developer dashboard. You can follow this [guide](https://developer.spotify.com/documentation/general/guides/authorization/app-settings/).
-Ensure that you add `Redirect URI` as `http://localhost:8080/callback` since this program has that value hardcoded.
+1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+2. Create a new app
+3. Add `http://localhost:8080/callback` as a Redirect URI in your app settings
 
-After getting the credentials, create `.env` file where you have cloned this project. Replace the values below with your credentials -
-```
+### 2. Configure Environment Variables
+
+Create a `.env` file in the project root with your credentials:
+
+```env
 RSPOTIFY_CLIENT_ID=your_client_id_value
 RSPOTIFY_CLIENT_SECRET=your_client_secret_value
 ```
 
-## Running
+### 3. First Run
 
-- Ensure that you have `Rust` installed.
+On first run, the app will open your browser for Spotify authorization. After granting permission, tokens are automatically cached to `.spotify_token_cache.json` and will be reused on subsequent runs.
+
+## Usage
 
 ### Interactive Mode (Recommended)
 
-Simply run:
+Launch the interactive menu:
+
 ```bash
 cargo run
 ```
 
-This will launch an interactive menu where you can:
+The menu provides options to:
 - List all your playlists
-- Create/update playlists from liked songs (with guided prompts)
+- Create/update playlists from liked songs (with guided prompts for conditions)
 - Remove unavailable tracks from liked songs
-- Navigate back to the main menu after each action
-
-On first run, the app will prompt you to authorize it in Spotify. Follow the instructions in the terminal.
+- Return to main menu after each operation
 
 ### Direct CLI Commands
 
-You can also use direct commands without the interactive menu:
+For automation or scripting, use direct commands:
 
-**List all your playlists:**
 ```bash
+# List all playlists
 cargo run -- list-playlists
-```
 
-**Create/update a playlist from liked songs:**
-```bash
-# Create playlist for a specific artist
-cargo run -- create-playlist --condition artist --value arijit
+# Create/update playlist for a specific artist
+cargo run -- create-playlist --condition artist --value "arijit singh"
 
-# Create playlist for old Hindi songs
+# Create/update playlist for old Hindi songs
 cargo run -- create-playlist --condition old-hindi --value ""
-```
 
-**Remove unavailable tracks from liked songs:**
-```bash
+# Remove unavailable tracks from liked songs
 cargo run -- remove-deleted-tracks
-```
 
-**View help:**
-```bash
+# Show help
 cargo run -- --help
 ```
 
+## How It Works
+
+- **Authentication**: Uses OAuth 2.0 with automatic token caching and refresh
+- **Playlist Creation**: Fetches all liked songs, filters by condition, checks for duplicates, and adds new tracks in batches
+- **Deduplication**: Automatically prevents duplicate tracks when updating existing playlists
+- **Region Detection**: Uses your Spotify account's registered country for availability checks
+
+## Development
+
+```bash
+# Build the project
+cargo build
+
+# Check code without building
+cargo check
+```
+
 ## Known Issues
-- Currently, the playlist created is public even when private option is specified. Seems like a issue with the Spotify API. [Link](https://community.spotify.com/t5/Spotify-for-Developers/Api-to-create-a-private-playlist-doesn-t-work/td-p/5407807).
+
+- Playlists are created as public even when private flag is set (Spotify API limitation - [discussion](https://community.spotify.com/t5/Spotify-for-Developers/Api-to-create-a-private-playlist-doesn-t-work/td-p/5407807))
