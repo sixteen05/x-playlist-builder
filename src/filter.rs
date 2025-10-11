@@ -1,8 +1,42 @@
 use rspotify::model::{FullTrack, TrackId};
+use rspotify::prelude::*;
+use rspotify::{model::SearchType, AuthCodeSpotify};
 
 pub struct FilterResult<'a> {
     pub state: bool,
     pub track_id: TrackId<'a>,
+}
+
+pub struct ArtistSearchResult {
+    pub id: String,
+    pub name: String,
+    pub followers: u32,
+    pub genres: Vec<String>,
+}
+
+pub async fn search_artists(
+    spotify: &AuthCodeSpotify,
+    query: &str,
+    limit: u32,
+) -> Result<Vec<ArtistSearchResult>, Box<dyn std::error::Error>> {
+    let result = spotify
+        .search(query, SearchType::Artist, None, None, Some(limit), None)
+        .await;
+
+    match result {
+        Ok(rspotify::model::SearchResult::Artists(page)) => Ok(page
+            .items
+            .into_iter()
+            .map(|artist| ArtistSearchResult {
+                id: artist.id.id().to_string(),
+                name: artist.name,
+                followers: artist.followers.total,
+                genres: artist.genres,
+            })
+            .collect()),
+        Ok(_) => Ok(Vec::new()),
+        Err(e) => Err(Box::new(e)),
+    }
 }
 
 pub fn filter_by_condition<'a>(
@@ -29,9 +63,11 @@ pub fn filter_by_condition<'a>(
             let track_artists = track.artists;
             let mut artist_matched = false;
             for artist in track_artists {
-                if artist.name.to_lowercase().contains(condition_value) {
-                    artist_matched = true;
-                    break;
+                if let Some(artist_id) = &artist.id {
+                    if artist_id.id() == condition_value {
+                        artist_matched = true;
+                        break;
+                    }
                 }
             }
             artist_matched

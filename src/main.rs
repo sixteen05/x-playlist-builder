@@ -5,7 +5,7 @@ use x_playlist_builder::{
     auth::SpotifyAuth,
     filter::{
         filter_by_condition, filter_condition_to_playlist_name,
-        filter_removed_songs_with_no_avaliable_market,
+        filter_removed_songs_with_no_avaliable_market, search_artists,
     },
     playlist::{create_or_get_playlist, get_all_playlist_created_by_user},
     util::fetch_all,
@@ -51,8 +51,13 @@ async fn list_playlists(spotify: &rspotify::AuthCodeSpotify) {
     }
 }
 
-async fn create_playlist(spotify: &rspotify::AuthCodeSpotify, condition_name: String, condition_value: String) {
-    let playlist_name = filter_condition_to_playlist_name(&condition_name, &condition_value);
+async fn create_playlist(
+    spotify: &rspotify::AuthCodeSpotify,
+    condition_name: String,
+    condition_value: String,
+    artist_name: String,
+) {
+    let playlist_name = filter_condition_to_playlist_name(&condition_name, &artist_name);
 
     println!("Creating/updating playlist: {}", playlist_name);
     let existing_playlist = create_or_get_playlist(spotify, playlist_name).await;
@@ -144,7 +149,9 @@ fn show_main_menu() -> MenuAction {
     }
 }
 
-fn get_create_playlist_inputs() -> (String, String) {
+async fn get_create_playlist_inputs(
+    spotify: &rspotify::AuthCodeSpotify,
+) -> (String, String, String) {
     let conditions = vec!["artist", "old-hindi"];
 
     let condition_selection = Select::with_theme(&ColorfulTheme::default())
@@ -156,16 +163,76 @@ fn get_create_playlist_inputs() -> (String, String) {
 
     let condition = conditions[condition_selection].to_string();
 
-    let value = if condition == "artist" {
-        Input::<String>::with_theme(&ColorfulTheme::default())
-            .with_prompt("Enter artist name")
+    let (artist_id, artist_name) = if condition == "artist" {
+        let search_query: String = Input::with_theme(&ColorfulTheme::default())
+            .with_prompt("Enter artist name to search")
             .interact_text()
-            .unwrap()
+            .unwrap();
+
+        println!("Searching for artists...");
+
+        // Try to refresh token before searching
+        if let Err(e) = spotify.refetch_token().await {
+            println!("Note: Could not refresh token preemptively: {:?}", e);
+        }
+
+        let artists = match search_artists(spotify, &search_query, 10).await {
+            Ok(artists) => artists,
+            Err(e) => {
+                println!("Search failed: {:?}", e);
+                println!("Attempting to refresh token...");
+                match spotify.refetch_token().await {
+                    Ok(_) => {
+                        println!("Token refreshed, retrying search...");
+                        match search_artists(spotify, &search_query, 10).await {
+                            Ok(artists) => artists,
+                            Err(e) => {
+                                println!("Search failed again: {:?}", e);
+                                println!("Please restart the application to re-authenticate.");
+                                return (String::new(), String::new(), String::new());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("Failed to refresh token: {:?}", e);
+                        println!("Please restart the application to re-authenticate.");
+                        return (String::new(), String::new(), String::new());
+                    }
+                }
+            }
+        };
+
+        if artists.is_empty() {
+            println!("No artists found. Please try again.");
+            return (String::new(), String::new(), String::new());
+        }
+
+        let artist_options: Vec<String> = artists
+            .iter()
+            .map(|a| {
+                let genres = if a.genres.is_empty() {
+                    "No genres".to_string()
+                } else {
+                    a.genres.join(", ")
+                };
+                format!("{} | Followers: {} | Genres: {}", a.name, a.followers, genres)
+            })
+            .collect();
+
+        let artist_selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select an artist")
+            .items(&artist_options)
+            .default(0)
+            .interact()
+            .unwrap();
+
+        let selected_artist = &artists[artist_selection];
+        (selected_artist.id.clone(), selected_artist.name.clone())
     } else {
-        String::new()
+        (String::new(), String::new())
     };
 
-    (condition, value)
+    (condition, artist_id, artist_name)
 }
 
 async fn run_interactive_mode() {
@@ -188,8 +255,10 @@ async fn run_interactive_mode() {
                 list_playlists(&spotify).await;
             }
             MenuAction::CreatePlaylist => {
-                let (condition, value) = get_create_playlist_inputs();
-                create_playlist(&spotify, condition, value).await;
+                let (condition, artist_id, artist_name) = get_create_playlist_inputs(&spotify).await;
+                if !condition.is_empty() {
+                    create_playlist(&spotify, condition, artist_id, artist_name).await;
+                }
             }
             MenuAction::RemoveDeletedTracks => {
                 remove_deleted_tracks(&spotify).await;
@@ -217,7 +286,54 @@ async fn main() {
         }
         Some(Commands::CreatePlaylist { condition, value }) => {
             let resp = SpotifyAuth::new().await;
-            create_playlist(&resp.client, condition, value).await;
+
+            if condition == "artist" {
+                println!("Searching for artists matching '{}'...", value);
+
+                let artists = match search_artists(&resp.client, &value, 10).await {
+                    Ok(artists) => artists,
+                    Err(e) => {
+                        println!("Search failed: {:?}", e);
+                        println!("Attempting to refresh token...");
+                        match resp.client.refetch_token().await {
+                            Ok(_) => {
+                                println!("Token refreshed, retrying search...");
+                                match search_artists(&resp.client, &value, 10).await {
+                                    Ok(artists) => artists,
+                                    Err(e) => {
+                                        println!("Search failed again: {:?}", e);
+                                        return;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                println!("Failed to refresh token: {:?}", e);
+                                return;
+                            }
+                        }
+                    }
+                };
+
+                if artists.is_empty() {
+                    println!("No artists found for query: {}", value);
+                    return;
+                }
+
+                println!("Top artist results:");
+                for (idx, artist) in artists.iter().enumerate() {
+                    let genres = if artist.genres.is_empty() {
+                        "No genres".to_string()
+                    } else {
+                        artist.genres.join(", ")
+                    };
+                    println!("{}. {} | Followers: {} | Genres: {}", idx + 1, artist.name, artist.followers, genres);
+                }
+
+                println!("\nUsing top result: {}", artists[0].name);
+                create_playlist(&resp.client, condition, artists[0].id.clone(), artists[0].name.clone()).await;
+            } else {
+                create_playlist(&resp.client, condition, value.clone(), String::new()).await;
+            }
         }
         Some(Commands::RemoveDeletedTracks) => {
             let resp = SpotifyAuth::new().await;

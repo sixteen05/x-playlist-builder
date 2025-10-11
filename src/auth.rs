@@ -28,19 +28,50 @@ impl SpotifyAuth {
             ..Default::default()
         };
 
-        let mut client = AuthCodeSpotify::with_config(creds.unwrap(), oauth, config);
+        let client = AuthCodeSpotify::with_config(creds.unwrap(), oauth, config);
 
         // Try to read cached token first, only prompt if not available or expired
-        match client.read_token_cache(false).await {
-            Ok(Some(_)) => {
+        let needs_reauth = match client.read_token_cache(false).await {
+            Ok(Some(token)) => {
                 println!("Using cached token");
+                // Check if token needs refresh or is invalid
+                if token.is_expired() {
+                    println!("Token expired, refreshing...");
+                    match client.refetch_token().await {
+                        Ok(_) => {
+                            println!("Token refreshed successfully");
+                            false
+                        }
+                        Err(_) => {
+                            println!("Failed to refresh token, will re-authenticate");
+                            true
+                        }
+                    }
+                } else {
+                    // Token appears valid, but let's verify it works
+                    match client.current_user().await {
+                        Ok(_) => {
+                            println!("Token validated successfully");
+                            false
+                        }
+                        Err(_) => {
+                            println!("Token is invalid, will re-authenticate");
+                            true
+                        }
+                    }
+                }
             }
             _ => {
-                println!("No valid cached token found, requesting authorization...");
-                let url = client.get_authorize_url(false).unwrap();
-                client.prompt_for_token(&url).await.unwrap();
-                // Token is automatically cached by rspotify
+                println!("No valid cached token found");
+                true
             }
+        };
+
+        if needs_reauth {
+            println!("Requesting new authorization...");
+            let url = client.get_authorize_url(false).unwrap();
+            client.prompt_for_token(&url).await.unwrap();
+            // Token is automatically cached by rspotify
         }
 
         Self { client }
